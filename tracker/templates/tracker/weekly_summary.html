@@ -1,0 +1,199 @@
+{% extends 'tracker/base.html' %}
+
+{% block title %}Weekly Summary - Calorie Tracker{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header mb-4">
+    <h1>Weekly Summary</h1>
+    <p>Week of {{ week_start|date:"F d" }} - {{ week_end|date:"F d, Y" }}</p>
+</div>
+
+<!-- Week Navigation -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-calendar3"></i> Select Week</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <label for="week_start" class="form-label">Select Week Start Date</label>
+                <input type="date" name="week_start" id="week_start" class="form-control" value="{{ week_start|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> View Week
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Weekly Statistics -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="stat-card">
+            <div class="stat-value text-primary-color">{{ weekly_total }}</div>
+            <div class="stat-label">Total Calories</div>
+            <small class="text-muted">This week</small>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="stat-card">
+            <div class="stat-value text-primary-color">{{ weekly_target }}</div>
+            <div class="stat-label">Weekly Target</div>
+            <small class="text-muted">Goal</small>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="stat-card">
+            <div class="stat-value {% if weekly_total <= weekly_target %}text-success{% else %}text-danger{% endif %}">
+                {{ daily_target|floatformat:0 }}
+            </div>
+            <div class="stat-label">Daily Target</div>
+            <small class="text-muted">Per day</small>
+        </div>
+    </div>
+</div>
+
+<!-- Daily Breakdown -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Daily Breakdown</h5>
+    </div>
+    <div class="card-body">
+        {% if daily_summaries %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Day</th>
+                        <th>Entries</th>
+                        <th>Total Calories</th>
+                        <th>vs Target</th>
+                        <th>Progress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in daily_summaries %}
+                    <tr>
+                        <td><strong>{{ day.date|date:"M d, Y" }}</strong></td>
+                        <td>{{ day.date|date:"l" }}</td>
+                        <td><span class="badge bg-primary-color text-white">{{ day.entry_count }}</span></td>
+                        <td><strong>{{ day.total_calories|floatformat:2 }} kcal</strong></td>
+                        <td>
+                            {% if day.difference > 0 %}
+                            <span class="text-danger">
+                                +{{ day.difference|floatformat:0 }} kcal
+                            </span>
+                            {% else %}
+                            <span class="text-success">
+                                {{ day.difference|floatformat:0 }} kcal
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% widthratio day.total_calories daily_target 100 as progress %}
+                            <div class="progress" style="height: 24px;">
+                                <div class="progress-bar {% if progress >= 100 %}bg-danger{% elif progress >= 80 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     style="width: {% if progress > 100 %}100{% else %}{{ progress }}{% endif %}%">
+                                    {{ progress|floatformat:0 }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #F9FAFB;">
+                        <th colspan="3">Weekly Total</th>
+                        <th><strong>{{ weekly_total }} kcal</strong></th>
+                        <th colspan="2"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <!-- Chart Visualization -->
+        <div class="mt-4">
+            <h6 class="mb-3">Visual Progress</h6>
+            <canvas id="weeklyChart" height="100"></canvas>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h5>No data available</h5>
+            <p>No data available for this week.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{% url 'tracker:dashboard' %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    {% if daily_summaries %}
+    const ctx = document.getElementById('weeklyChart').getContext('2d');
+    const dailyData = [
+        {% for day in daily_summaries %}
+        {
+            date: '{{ day.date|date:"M d" }}',
+            calories: {{ day.total_calories|floatformat:0 }},
+            target: {{ daily_target|floatformat:0 }}
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [{
+                label: 'Calories Consumed',
+                data: dailyData.map(d => d.calories),
+                backgroundColor: '#4CAF50',
+                borderColor: '#2E7D32',
+                borderWidth: 1,
+                borderRadius: 8
+            }, {
+                label: 'Daily Target',
+                data: dailyData.map(d => d.target),
+                type: 'line',
+                borderColor: '#F59E0B',
+                borderWidth: 2,
+                fill: false,
+                pointRadius: 4,
+                pointBackgroundColor: '#F59E0B'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Calories (kcal)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}
